@@ -1,3 +1,6 @@
+from aiogram.types import ReplyKeyboardRemove, \
+    ReplyKeyboardMarkup, KeyboardButton, \
+    InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.contrib.fsm_storage.memory import MemoryStorage
 from aiogram.contrib.middlewares.logging import LoggingMiddleware
 from aiogram.utils.markdown import text, bold, italic, code
@@ -5,15 +8,23 @@ from aiogram.types import ParseMode
 from aiogram import Bot, Dispatcher, executor, types
 from utils import States
 from loader import dp, bot
-from .buttons import parent_in_system_kb
-from .buttons import student_main_kb
+from db import app_db
+from .student_buttons import parent_in_system_kb
+from .student_buttons import student_main_kb
+from .parent import parent_main_kb
+from .tutor_main import tutor_main_kb
+from .tutor_gen_keys import *
+from .tutor_create import *
+from .tutor_publish import *
+from .teacher import teacher_main_kb
 
 
 @dp.message_handler(state='*', commands=['start'])
 async def process_start_command(message: types.Message):
     state = dp.current_state(user=message.from_user.id)  # take current state of user
     await state.set_state(States.UNAUTHORIZED_STATE[0])  # user is unauthorized in the very beginning
-    await message.answer("Привет, я бот введи пожалуйста ключ :)")  # write welcome message to user
+    await message.answer('Привет, я бот введите пожалуйста ключ :)',
+                         reply_markup=ReplyKeyboardRemove())       # write welcome message to user
 
 
 # Authorization works only in UNAUTHORIZED state
@@ -22,27 +33,36 @@ async def authorization(msg: types.Message):
     text_ = msg.text                                  # take user's message
     state = dp.current_state(user=msg.from_user.id)  # take current state
     # TODO: check user's authorization code
-    if text_ == 'studentCode':
+    check = True
+    if not check:
+        await msg.answer('Такого ключа не существует, пожалуйста, попробуйте еще раз.')  # code is not correct
+    elif text_[:3] == 'STU':
         await state.set_state(States.STUDENT_STATE[0])  # change user's state to STUDENT
         # add main buttons for student
-        await msg.answer("Вы успешно авторизовались как ученик.",
+        await msg.answer('Вы успешно авторизовались как ученик.',
                          reply_markup=student_main_kb)
 
-        # TODO: generate normal parent code
-        parentCode = 'parentCode'
-        await msg.answer(text("Код для авторизации родителя: ",
-                              code(parentCode), ".", sep=""),
+        await msg.answer(text('Пожалуйста, зарегестрируйте родителя.'),
                          parse_mode=ParseMode.MARKDOWN,
                          reply_markup=parent_in_system_kb)
-    elif text_ == 'parentCode':
+    elif text_[:3] == 'PAR':
         await state.set_state(States.PARENT_STATE[0])   # change user's state to PARENT
         # TODO: find children of the parent
-        await msg.answer("Вы успешно авторизовались как родитель. Вас добавили дети: ")
+        await msg.answer('Вы успешно авторизовались как родитель. Вас добавили дети: ',
+                         reply_markup=parent_main_kb)
+    elif text_[:3] == 'CUR':
+        await state.set_state(States.TUTOR_STATE[0])  # change user's state to TUTOR
+        await msg.answer('Вы успешно авторизовались как куратор.',
+                         reply_markup=tutor_main_kb)
+    elif text_[:3] == 'TEA':
+        await state.set_state(States.TEACHER_STATE[0])  # change user's state to TEACHER
+        await msg.answer('Вы успешно авторизовались как учитель.',
+                         reply_markup=teacher_main_kb)
     else:
-        await msg.answer("Такого ключа не существует, пожалуйста, попробуйте еще раз.")  # code is not correct
+        # TODO: some error message
+        await msg.answer('Ошибка. Пожалуйста обратитесь к администрации.')
 
 
-# @dp.message_handler(state='*')
-# async def echo_message(msg: types.Message):
-#     state = dp.current_state(user=msg.from_user.id)
-#     print(await state.get_state())
+@dp.message_handler(state='*')
+async def echo_message(msg: types.Message):
+    await msg.answer('Я вас не понял. Попробуйте другую команду.')
